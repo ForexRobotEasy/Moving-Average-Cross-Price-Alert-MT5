@@ -1,0 +1,167 @@
+
+// Moving Average Cross Price Alert MT5
+// Developer's Site: forexroboteasy.com
+// Developed by Forex Robot Easy Team
+
+// Include necessary libraries
+#include <Trade\Trade.mqh>
+#include <ChartObjects\ChartObjects.mqh>
+#include <Indicators\MA.mqh>
+#include <Alert\Alert.mqh>
+
+// Define input parameters
+input int ShortMA_Period = 10; // Period of the shorter-term moving average
+input int LongMA_Period = 20; // Period of the longer-term moving average
+input ENUM_MA_METHOD MA_Method = MODE_SMA; // Type of moving average
+input int MinConsecutiveBars = 3; // Minimum number of consecutive bars for crossover
+
+// Define global variables
+CTrade trade; // Trade object
+CAlert alert; // Alert object
+int prev_cross = 0; // Previous crossover
+int consecutive_bars = 0; // Number of consecutive bars for crossover
+
+// Initialize moving average objects
+CMA ShortMA;
+CMA LongMA;
+
+// Initialize chart objects
+CChartObjectText text;
+
+// Initialize alert parameters
+string alert_message = 'Moving Average Crossover Alert!';
+
+// Initialize error handling parameters
+bool error = false;
+string error_message;
+
+// Function to calculate and display moving averages on the chart
+void CalculateMovingAverages()
+{
+   // Calculate moving averages
+   double short_ma = ShortMA.iMA(_Symbol, _Period, ShortMA_Period, 0, MA_Method, PRICE_CLOSE, 0);
+   double long_ma = LongMA.iMA(_Symbol, _Period, LongMA_Period, 0, MA_Method, PRICE_CLOSE, 0);
+   
+   // Display moving averages on the chart
+   text.Delete();
+   text.Create(0, 'MovingAverages', 0, Time[0], short_ma);
+   text.FontSize(10);
+   text.Text('Short MA: ' + DoubleToString(short_ma, _Digits) + '    Long MA: ' + DoubleToString(long_ma, _Digits));
+}
+
+// Function to identify moving average crossovers and generate alerts
+void CheckMovingAverageCrossover()
+{
+   double short_ma = ShortMA.iMA(_Symbol, _Period, ShortMA_Period, 0, MA_Method, PRICE_CLOSE, 0);
+   double long_ma = LongMA.iMA(_Symbol, _Period, LongMA_Period, 0, MA_Method, PRICE_CLOSE, 0);
+   
+   // Check for moving average crossover
+   if (prev_cross == 0)
+   {
+      if (short_ma > long_ma)
+         prev_cross = 1;
+      else if (short_ma < long_ma)
+         prev_cross = -1;
+   }
+   else if (prev_cross == 1)
+   {
+      if (short_ma < long_ma)
+      {
+         prev_cross = -1;
+         consecutive_bars = 0;
+      }
+      else if (short_ma == long_ma)
+      {
+         consecutive_bars++;
+         if (consecutive_bars >= MinConsecutiveBars)
+         {
+            // Generate alert
+            alert.Message(alert_message);
+            alert.Send();
+         }
+      }
+   }
+   else if (prev_cross == -1)
+   {
+      if (short_ma > long_ma)
+      {
+         prev_cross = 1;
+         consecutive_bars = 0;
+      }
+      else if (short_ma == long_ma)
+      {
+         consecutive_bars++;
+         if (consecutive_bars >= MinConsecutiveBars)
+         {
+            // Generate alert
+            alert.Message(alert_message);
+            alert.Send();
+         }
+      }
+   }
+}
+
+// OnTick event handler
+void OnTick()
+{
+   CalculateMovingAverages();
+   CheckMovingAverageCrossover();
+}
+
+// OnInit event handler
+void OnInit()
+{
+   // Initialize moving average objects
+   ShortMA.Name('ShortMA');
+   ShortMA.Period(ShortMA_Period);
+   ShortMA.SetPrice(PRICE_CLOSE);
+   ShortMA.Method(MA_Method);
+   
+   LongMA.Name('LongMA');
+   LongMA.Period(LongMA_Period);
+   LongMA.SetPrice(PRICE_CLOSE);
+   LongMA.Method(MA_Method);
+   
+   // Initialize chart objects
+   text.Delete();
+   text.FontSize(10);
+   
+   // Initialize error handling
+   error = false;
+   error_message = '';
+}
+
+// OnDeinit event handler
+void OnDeinit(const int reason)
+{
+   text.Delete();
+}
+
+// OnError event handler
+void OnError(const int error_code, const string error_message)
+{
+   error = true;
+   error_message = error_message;
+}
+
+// Main program entry point
+void OnStart()
+{
+   OnInit();
+   
+   // Check if there are any errors during initialization
+   if (error)
+   {
+      Print('Error during initialization: ' + error_message);
+      return;
+   }
+   
+   // Run the program
+   while (!IsStopped())
+   {
+      OnTick();
+      Sleep(1000);
+   }
+   
+   OnDeinit(0);
+}
